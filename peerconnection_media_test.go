@@ -747,7 +747,7 @@ func TestAddTransceiver(t *testing.T) {
 	assert.NoError(t, pc.Close())
 }
 
-func TestAddTransceiverAddTrack_reuse(t *testing.T) {
+func TestAddTransceiverAddTrack_Reuse(t *testing.T) {
 	mediaEngine := MediaEngine{}
 	mediaEngine.RegisterDefaultCodecs()
 	api := NewAPI(WithMediaEngine(mediaEngine))
@@ -779,13 +779,40 @@ func TestAddTransceiverAddTrack_reuse(t *testing.T) {
 	require.NoError(t, pc.RemoveTrack(sender1))
 
 	track2, _ := addTrack()
-
 	assert.Equal(t, 1, len(pc.GetTransceivers()))
 	assert.Equal(t, track2, tr.Sender().track)
 
 	addTrack()
 	assert.Equal(t, 2, len(pc.GetTransceivers()))
 
+	assert.NoError(t, pc.Close())
+}
+
+func TestAddTransceiverAddTrack_NewRTPSender_Error(t *testing.T) {
+	mediaEngine := MediaEngine{}
+	mediaEngine.RegisterDefaultCodecs()
+	api := NewAPI(WithMediaEngine(mediaEngine))
+	pc, err := api.NewPeerConnection(Configuration{})
+	assert.NoError(t, err)
+
+	_, err = pc.AddTransceiverFromKind(
+		RTPCodecTypeVideo,
+		RtpTransceiverInit{Direction: RTPTransceiverDirectionRecvonly},
+	)
+	assert.NoError(t, err)
+
+	dtlsTransport := pc.dtlsTransport
+	pc.dtlsTransport = nil
+
+	track, err := pc.NewTrack(DefaultPayloadTypeVP8, rand.Uint32(), "foo", "bar")
+	assert.NoError(t, err)
+
+	_, err = pc.AddTrack(track)
+	assert.Error(t, err, "DTLSTransport must not be nil")
+
+	assert.Equal(t, 1, len(pc.GetTransceivers()))
+
+	pc.dtlsTransport = dtlsTransport
 	assert.NoError(t, pc.Close())
 }
 
