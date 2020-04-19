@@ -1100,16 +1100,33 @@ func (pc *PeerConnection) AddTrack(track *Track) (*RTPSender, error) {
 
 	var transceiver *RTPTransceiver
 	for _, t := range pc.GetTransceivers() {
-		if !t.stopped && t.Sender() != nil &&
-			!t.Sender().hasSent() &&
-			t.Receiver() != nil &&
-			t.Receiver().Track() != nil &&
-			t.Receiver().Track().Kind() == track.Kind() {
-			transceiver = t
-			break
+		isPlanB := pc.configuration.SDPSemantics == SDPSemanticsPlanB
+
+		if isPlanB {
+			if !t.stopped && t.Sender() != nil &&
+				!t.Sender().hasSent() &&
+				t.Receiver() != nil &&
+				t.Receiver().Track() != nil &&
+				t.Receiver().Track().Kind() == track.Kind() {
+				transceiver = t
+				break
+			}
+		} else {
+			if !t.stopped && t.kind == track.Kind() && t.Sender() == nil {
+				transceiver = t
+				break
+			}
 		}
 	}
 	if transceiver != nil {
+		if transceiver.Sender() == nil {
+			sender, err := pc.api.NewRTPSender(track, pc.dtlsTransport)
+			if err != nil {
+				return nil, err
+			}
+			transceiver.setSender(sender)
+			// we still need to call setSendingTrack to ensure direction has changed
+		}
 		if err := transceiver.setSendingTrack(track); err != nil {
 			return nil, err
 		}
